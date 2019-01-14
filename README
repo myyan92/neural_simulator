@@ -1,0 +1,15 @@
+build_dataset.py: convert from physbam txt files to tfrecords, and also parsing tfrecords during train/test.
+
+gen_data_rollout.py: script to generate data from simulation.
+
+model_biLSTM_concat.py: The most promising model so far.
+
+model_conditional_biLSTM_concat.py: modify the above model, so that it can be trained and tested on multiple physical parameters and hopefully can generalize.
+
+model_wrapper.py: a unified interface to find tf models according to name.
+
+train_eval.py / train_eval_cond.py: training and evaluation process. "Cond" stands for model conditioned on physical parameters.
+
+eval_visualize.py / eval_visualize_cond.py: evaluation and plotting for trained networks.
+
+graph_net folder: contains a fork from deepmind's graph network. Doesn't perform as well as LSTM so far. Low priority.
