@@ -17,13 +17,13 @@ class Model:
                 self.input = input
                 self.action = action
             else:
-                self.input = tf.placeholder(dtype=tf.float32, shape=[None,128,2])
-                self.action = tf.placeholder(dtype=tf.float32, shape=[None,128,2])
+                self.input = tf.placeholder(dtype=tf.float32, shape=[None,64,2])
+                self.action = tf.placeholder(dtype=tf.float32, shape=[None,64,2])
 
-            self.ind = tf.norm(self.action, axis=2, keep_dims=True) > 0
+            self.ind = tf.norm(self.action, axis=2, keepdims=True) > 0
             self.ind = tf.cast(self.ind, tf.float32)
             self.concat = tf.concat([self.input, self.action, self.ind], axis=2)
-            cell = tf.nn.rnn_cell.BasicLSTMCell(32, forget_bias=1.0, activation=tf.nn.relu6)  # default is tanh
+            cell = tf.nn.rnn_cell.LSTMCell(32, forget_bias=1.0, activation=tf.nn.relu6, name='basic_lstm_cell')  # default is tanh
             self.biLSTM, _ = tf.nn.bidirectional_dynamic_rnn(cell, cell, self.concat,
                                                              dtype = tf.float32, time_major=False)
             # self.biLSTM stores (hidden_fw, hidden_bw)
@@ -65,7 +65,7 @@ class Model:
         if GT_position is not None:
             self.gt_pred = GT_position
         else:
-            self.gt_pred = tf.placeholder(name="gt_pred", dtype=tf.float32, shape=[None, 128,2])
+            self.gt_pred = tf.placeholder(name="gt_pred", dtype=tf.float32, shape=[None, 64,2])
         self.loss = tf.nn.l2_loss(self.gt_pred-self.pred, "loss")
         self.optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(self.loss)
         tf.summary.scalar('loss', self.loss)
@@ -77,16 +77,16 @@ class Model:
                                                                    self.gt_pred:annos})
         return loss
 
-    def save(self, sess, step):
-        self.saver.save(sess, './model', global_step=step)
+    def save(self, sess, file_dir, step):
+        self.saver.save(sess, file_dir, global_step=step)
 
     def load(self, sess, snapshot):
         self.saver.restore(sess, snapshot)
 
 if __name__ == "__main__":
     model = Model()
-    input = tf.placeholder(dtype=tf.float32, shape=(None, 128,2))
-    action = tf.placeholder(dtype=tf.float32, shape=(None, 128,2))
+    input = tf.placeholder(dtype=tf.float32, shape=(None, 64,2))
+    action = tf.placeholder(dtype=tf.float32, shape=(None, 64,2))
     model.build(input, action)
-    output = tf.placeholder(dtype=tf.float32, shape=(None, 128,2))
+    output = tf.placeholder(dtype=tf.float32, shape=(None, 64,2))
     model.setup_optimizer(0.001, output)
