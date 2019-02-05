@@ -77,8 +77,8 @@ class Model:
                                                                    self.gt_pred:annos})
         return loss
 
-    def save(self, sess, step):
-        self.saver.save(sess, './model', global_step=step)
+    def save(self, sess, file_dir, step):
+        self.saver.save(sess, file_dir, global_step=step)
 
     def load(self, sess, snapshot):
         self.saver.restore(sess, snapshot)

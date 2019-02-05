@@ -11,12 +11,9 @@ class Trainner():
 
         # create TensorFlow Dataset objects
         tr_data = tf.data.TFRecordDataset(train_dataset)
-        tr_data = tr_data.map(data_parser)
-        tr_data = tr_data.shuffle(buffer_size=5000)
-        tr_data = tr_data.batch(batch_size)
+        tr_data = tr_data.map(data_parser).shuffle(1000).batch(batch_size)
         val_data = tf.data.TFRecordDataset(eval_dataset)
-        val_data = val_data.map(data_parser)
-        val_data = val_data.batch(batch_size)
+        val_data = val_data.map(data_parser).batch(batch_size)
         # create TensorFlow Iterator object
         iterator = tf.data.Iterator.from_structure(tr_data.output_types,
                                                    tr_data.output_shapes)
@@ -24,7 +21,7 @@ class Trainner():
         # create two initialization ops to switch between the datasets
         self.training_init_op = iterator.make_initializer(tr_data)
         self.validation_init_op = iterator.make_initializer(val_data)
-        
+
         tf_config = tf.ConfigProto(
             inter_op_parallelism_threads=16,
             intra_op_parallelism_threads=16)
@@ -35,7 +32,9 @@ class Trainner():
         self.model.build(input=self.start, action=self.action)
         self.model.setup_optimizer(0.001, self.result)
         self.global_step = 0
-        self.train_writer = tf.summary.FileWriter('tboard', self.sess.graph)
+        self.trial_name = 'test32'
+        self.train_writer = tf.summary.FileWriter('tboard/train_{}/'.format(self.trial_name), self.sess.graph)
+        self.train
         self.sess.run(tf.global_variables_initializer())
 
     def train_epoch(self):
@@ -82,17 +81,17 @@ class Trainner():
     def train(self):
         for i in range(self.num_epoch):
             self.train_epoch()
+            self.model.save(self.sess, './models_{}/model'.format(self.trial_name), i)
             self.eval()
-            self.model.save(self.sess, i)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('model_type', choices=['linear', 'fc_concat', 'fc_add', 'conv_add', 'LSTM'],
                                       help="model type")
     args = parser.parse_args()
-    train_dataset = 'datasets/neuralsim_train_s9ka10.tfrecords'
-    test_dataset = 'datasets/neuralsim_test_s1ka10.tfrecords'
+    train_dataset = 'datasets/neuralsim_train.tfrecords'
+    test_dataset = 'datasets/neuralsim_test.tfrecords'
 
-    trainner = Trainner(args.model_type, train_dataset, test_dataset, 35, 640)
+    trainner = Trainner(args.model_type, train_dataset, test_dataset, 50, 640)
     trainner.train()
 
