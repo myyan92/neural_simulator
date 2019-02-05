@@ -41,19 +41,22 @@ class Visualizer():
                 total_loss += loss
                 total_count += result.shape[0] * result.shape[1]
                 #np.savetxt('../pred/%04d_knots.txt'%(total_count), pred[0].transpose())
-                plt.plot(start[0,:,0], start[0,:,1], label='start')
-                plt.plot(result[0,:,0], result[0,:,1], label='GT')
-                plt.plot(pred[0,:,0], pred[0,:,1], label='pred')
+                plt.clf()
+                fig = plt.gcf()
+                fig.set_size_inches(8,8)
+                plt.plot(start[0,:,0], start[0,:,1], c='tab:blue', linewidth=1, label='start')
+                plt.plot(result[0,:,0], result[0,:,1], c='tab:green', linewidth=0.5, label='GT')
+                plt.scatter(pred[0,:,0], pred[0,:,1], marker='.', c='tab:green', s=5, label='pred')
                 idx = np.where(action != 0)
                 if len(idx[0])>0:
                     node = idx[1][0]
-                    print(node)
-                    plt.arrow(start[0,node,0], start[0,node,1],
-                                    result[0,node,0]-start[0,node,0],result[0,node,1]-start[0,node,1])
+                    plt.arrow(start[0,node,0], start[0,node,1], action[idx][0], action[idx][1])
+                                    # result[0,node,0]-start[0,node,0],result[0,node,1]-start[0,node,1])
                 plt.legend()
                 plt.axis("equal")
+                axes = plt.gca()
                 #plt.show()
-                plt.savefig("vis_%03d.png"%(total_count // result.shape[1]))
+                plt.savefig("vis_%03d.png"%(total_count // result.shape[1]),bbox_inches='tight')
                 plt.close()
                 print("saved")
             except tf.errors.OutOfRangeError:

@@ -1,9 +1,9 @@
-from model_fc_concat import Model as Model_fc_concat
-from model_fc_add import Model as Model_fc_add
-from model_conv_add import Model as Model_conv_add
-from model_linear import Model as Model_linear
-from model_biLSTM_concat import Model as Model_biLSTM
-from model_conditional_biLSTM_concat import Model as Model_cond_biLSTM
+from neural_simulator.model_fc_concat import Model as Model_fc_concat
+from neural_simulator.model_fc_add import Model as Model_fc_add
+from neural_simulator.model_conv_add import Model as Model_conv_add
+from neural_simulator.model_linear import Model as Model_linear
+from neural_simulator.model_biLSTM_concat import Model as Model_biLSTM
+from neural_simulator.model_conditional_biLSTM_concat import Model as Model_cond_biLSTM
 
 def Model(type):
     if type=='fc_concat':
