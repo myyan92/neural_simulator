@@ -7,8 +7,9 @@ Subsequences up to 5 steps can have the same action.
 import numpy as np
 import os, sys, random, argparse
 import glob, time
-from physbam_python.rollout_physbam import rollout_single
 from multiprocessing import Pool
+from physbam_python.rollout_physbam_3d import rollout_single
+from physbam_python.util import hasCollision, hasShapeAngle
 
 parser = argparse.ArgumentParser()
 parser.add_argument('output_dir', help="directory to store generated data")
@@ -23,38 +24,13 @@ parser.add_argument('-f', '--friction', type=float,
 args = parser.parse_args()
 
 
-def has_sharp_angle(rope):
-    for i in range(rope.shape[0]-2):
-        p1, p2, p3 = rope[i:i+3,:]
-        a = p2 - p1
-        b = p3 - p2
-        a/=np.linalg.norm(a)
-        b/=np.linalg.norm(b)
-        if a.dot(b) < 1/2:
-            return True
-    return False
-
-def has_collision(rope):
-    n = rope.shape[0]
-    for i in range(n-1):
-        for j in range(i+1,n-1):
-            v1,v2,v3,v4 = rope[i],rope[i+1],rope[j],rope[j+1]
-            denom = (v4[1]-v3[1])*(v2[0]-v1[0])-(v4[0]-v3[0])*(v2[1]-v1[1])
-            if np.isclose(denom,0.0):
-                continue
-            u1 = ((v4[0]-v3[0])*(v1[1]-v3[1])-(v4[1]-v3[1])*(v1[0]-v3[0]))/denom
-            u2 = ((v2[0]-v1[0])*(v1[1]-v3[1])-(v2[1]-v1[1])*(v1[0]-v3[0]))/denom
-            if u1 < 1 and u1 > 0 and u2 < 1 and u2 > 0:
-                return True
-    return False
-
 def process_func(idx):
     filename = os.path.join(args.input_dir, '%04d.txt'%(idx))
     samples = np.loadtxt(filename)[::2,:]/12
-    if has_collision(samples):
+    if hasCollision(samples):
         print("!!!collision on", idx)
         return
-    if has_sharp_angle(samples):
+    if hasSharpAngle(samples):
         print("!!!sharp angle on", idx)
         return
     if os.path.isfile(os.path.join(args.output_dir,'{:08d}_act.txt'.format(idx))):
@@ -108,7 +84,7 @@ def process_func(idx):
             filename = os.path.join(args.output_dir, '%08d_%03d.txt'%(idx, count))
             np.savetxt(filename, samples)
         for d in data:
-            if has_collision(d):
+            if hasCollision(d):
                 if count > target//2 and target > 10:
                     target = target//2
                     break
