@@ -24,7 +24,26 @@ class Model:
                                                              dtype = tf.float32, time_major=False)
             # self.biLSTM stores (hidden_fw, hidden_bw)
             self.feature = tf.concat([self.biLSTM[0], self.biLSTM[1], self.input], axis=2)
-            self.pred = self.conv_layer(self.feature, name='pred', channels=3, kernel=1, activation=None)
+
+            # generating attention weight matrix
+            dists = tf.reduce_sum(self.input*self.input, axis=-1)
+            dists = tf.expand_dims(dists, axis=-1) + tf.expand_dims(dists, axis=-2) - 2*tf.matmul(self.input, self.input, transpose_b=True)
+            dists = tf.sqrt(tf.maximum(dists,1e-8))
+            segment_lengths = tf.linalg.band_part(dists, 0, 1) - tf.linalg.band_part(dists, 0, 0)
+            avg_seg_lengths = tf.reduce_sum(segment_lengths, axis=[1,2], keepdims=True) / tf.cast(self.input.shape[1]-1, tf.float32)
+            attention_w = tf.exp(-dists/avg_seg_lengths)
+            attention_w = tf.where(attention_w > tf.exp(-1.2), attention_w, tf.zeros_like(attention_w))
+            attention_w = attention_w - tf.linalg.band_part(attention_w, 1, 1)
+            attention_w = attention_w / (tf.reduce_sum(attention_w, axis=-1, keepdims=True) + 1e-8)
+            self.attention_feature = tf.matmul(attention_w, self.feature)
+            self.combined_feature = tf.concat([self.feature, self.attention_feature], axis=2)
+            fc1 = self.dense(self.combined_feature, 'fc1', 512, 'relu')
+            fc2 = self.dense(self.combined_feature, 'fc2', 512, 'relu')
+            cell2 = tf.nn.rnn_cell.LSTMCell(256, forget_bias=1.0, activation=tf.nn.relu6, name='basic_lstm_cell_2')  # default is tanh
+            self.biLSTM_2, _ = tf.nn.bidirectional_dynamic_rnn(cell2, cell2, fc2,
+                                                               dtype = tf.float32, time_major=False)
+            self.feature_2 = tf.concat([self.biLSTM_2[0], self.biLSTM_2[1], self.input], axis=2)
+            self.pred = self.conv_layer(self.feature_2, name='pred', channels=3, kernel=1, activation=None)
 
             self.saver = tf.train.Saver(var_list=self.get_trainable_variables(), max_to_keep=50)
 
