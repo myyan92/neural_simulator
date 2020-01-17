@@ -1,0 +1,15 @@
+Model.node_func = @node/two_branch_mlp
+Model.edge_func = @edge/two_branch_mlp
+Model.edge_param = None
+
+node/two_branch_mlp.branch1_hidden_units = []
+node/two_branch_mlp.branch2_hidden_units = []
+node/two_branch_mlp.merge_hidden_units = []
+node/two_branch_mlp.output_unit = 2
+
+edge/two_branch_mlp.branch1_hidden_units = []
+edge/two_branch_mlp.branch2_hidden_units = []
+edge/two_branch_mlp.merge_hidden_units = [256,256,256,256,32]
+edge/two_branch_mlp.output_unit = 2
+edge/two_branch_mlp.batchnorm = True
+

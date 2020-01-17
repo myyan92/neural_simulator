@@ -5,7 +5,6 @@ from graph_nets import utils_tf
 from graph_nets.demos import models
 from matplotlib import pyplot as plt
 import numpy as np
-import sonnet as snt
 import tensorflow as tf
 import pdb
 
@@ -139,7 +138,7 @@ num_processing_steps = 16
 
 # Data / training parameters.
 batch_size = 64
-step_size = 1.0 / 16
+step_size = 1.0 / num_processing_steps
 train_dataset = '../neuralsim_train_s9ka10.tfrecords'
 eval_dataset = '../neuralsim_test_s1ka10.tfrecords'
 
@@ -198,7 +197,11 @@ input_graph = make_all_runnable_in_session(input_graph)
 output_ops = make_all_runnable_in_session(output_ops)
 
 saver = tf.train.Saver(max_to_keep=15)
-sess = tf.Session()
+tf_config = tf.ConfigProto(
+    inter_op_parallelism_threads=16,
+    intra_op_parallelism_threads=16)
+tf_config.gpu_options.allow_growth=True
+sess = tf.Session(config=tf_config)
 sess.run(tf.global_variables_initializer())
 saver.restore(sess, 'model-l8')
 
