@@ -17,7 +17,7 @@ def data_writer(s1,act,s2):
         'result': _floatList_feature(s2.flatten().tolist())}))
     return record
 
-def data_parser(record, augment=False):
+def data_parser(record, augment=True):
     features = tf.parse_single_example(
       record,
       features={
@@ -30,7 +30,7 @@ def data_parser(record, augment=False):
     action = tf.reshape(features['action'], tf.constant([64,2]))
     result = tf.reshape(features['result'], tf.constant([64,2]))
     if augment:
-        theta = tf.random.uniform([], -np.pi, np.pi)
+        theta = tf.random_uniform([], -np.pi, np.pi)
         rotate = tf.stack([tf.cos(theta), tf.sin(theta), -tf.sin(theta), tf.cos(theta)])
         rotate = tf.reshape(rotate, (2,2))
         start = tf.matmul(start, rotate)
