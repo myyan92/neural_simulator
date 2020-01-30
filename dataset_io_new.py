@@ -35,8 +35,12 @@ def data_parser(record, augment=True):
         rotate = tf.reshape(rotate, (3,3))
         start = tf.matmul(start, rotate)
         action_move, action_rotate = tf.split(action, [3,2], axis=-1)
-        action = tf.concat([tf.matmul(action_move, rotate), action_rotate], axis=-1)
+#        action = tf.concat([tf.matmul(action_move, rotate), action_rotate], axis=-1)
+        action = tf.matmul(action_move, rotate)
         result = tf.matmul(result, rotate)
+    else:
+        action_move, action_rotate = tf.split(action, [3,2], axis=-1)
+        action = action_move
     return start, action, result
 
 

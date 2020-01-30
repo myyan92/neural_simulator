@@ -46,18 +46,17 @@ class Model:
             self.biLSTM_2, _ = tf.nn.bidirectional_dynamic_rnn(cell2, cell2, fc2_drop,
                                                                dtype = tf.float32, time_major=False)
             self.feature_2 = tf.concat([self.biLSTM_2[0], self.biLSTM_2[1], self.input], axis=2)
-            conv1 = self.conv_layer(self.feature_2, name='conv1', channels=768, kernel=1)
-            # conv1_drop = tf.nn.dropout(conv1, 0.5)
+            fc3 = self.dense(self.feature_2, 'fc3', 768, 'relu')
+            # fc3_drop = tf.nn.dropout(fc3, 0.5)
 
-            # cell3 = tf.nn.rnn_cell.LSTMCell(256, forget_bias=1.0, activation=tf.nn.relu6, name='basic_lstm_cell_3')
             # cell3 = tf.nn.rnn_cell.GRUCell(256, activation=tf.nn.relu6, kernel_initializer=tf.variance_scaling_initializer(), bias_initializer=tf.zeros_initializer())
             # self.biLSTM_3, _ = tf.nn.bidirectional_dynamic_rnn(cell3, cell3, conv1, dtype=tf.float32, time_major=False)
             # self.feature_3 = tf.concat([self.biLSTM_3[0], self.biLSTM_3[1], self.input], axis=2)
             # self.feature_3_drop = tf.nn.dropout(self.feature_3, 0.5)
 
-            fc4 = self.dense(conv1, 'fc4', 256, 'relu')
+            fc4 = self.dense(fc3, 'fc4', 256, 'relu')
             # fc5 = self.dense(fc4, 'fc5', 64, 'relu')
-            self.pred = self.conv_layer(fc4, name='pred', channels=3, kernel=1, activation=None)
+            self.pred = self.dense(fc4, 'pred', 3, activation=None)
 
             self.saver = tf.train.Saver(var_list=self.get_trainable_variables(), max_to_keep=1000000)
 

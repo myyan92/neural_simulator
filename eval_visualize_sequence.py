@@ -1,8 +1,9 @@
 import tensorflow as tf
 from model_wrapper import Model
-from build_dataset import data_parser
+from dataset_io_new import data_parser
 import numpy as np
 import matplotlib.pyplot as plt
+import functools
 
 class Visualizer():
     def __init__(self, model_type, eval_dataset, eval_snapshot, plot_idx):
@@ -10,7 +11,7 @@ class Visualizer():
         self.plot_idx = plot_idx
         # create TensorFlow Dataset objects
         val_data = tf.data.TFRecordDataset(eval_dataset)
-        val_data = val_data.map(data_parser)
+        val_data = val_data.map(functools.partial(data_parser, augment=False))
         val_data = val_data.batch(1)
         # create TensorFlow Iterator object
         self.iterator = tf.data.Iterator.from_structure(val_data.output_types,
@@ -69,7 +70,7 @@ class Visualizer():
                                 color='#59a14f88',length_includes_head=True)
                                     # result[0,node,0]-start[0,node,0],result[0,node,1]-start[0,node,1])
                 plt.legend()
-                plt.axis("equal")                
+                plt.axis("equal")
                 axes = plt.gca()
                 axes.set_xlim([-0.6,0.6])
                 axes.set_ylim([-0.6,0.6])
@@ -83,7 +84,6 @@ class Visualizer():
                 break
 
 if __name__ == '__main__':
-    for i in range(1,20):
-        vis = Visualizer('LSTM', 'datasets/neuralsim_test_{}.tfrecords'.format(9000+i*10), 'models_best/model-best', i)
-        vis.eval()
-        tf.reset_default_graph()
+    vis = Visualizer('GRU_attention', 'datasets/neuralsim_test_simseq3d_topochange.tfrecords',
+                     'models_GRU_attention_topo/model-802', 0)
+    vis.eval()
