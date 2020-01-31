@@ -111,6 +111,9 @@ class Model:
         return tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, self.scope)
 
     def setup_optimizer(self, learning_rate, GT_position, gather_index_over, gather_index_under):
+        global_step = tf.Variable(0, trainable=False)
+        decay_learning_rate = tf.train.exponential_decay(learning_rate, global_step, 100000, 0.9, staircase=True)
+
         if GT_position is not None and gather_index_over is not None and gather_index_under is not None:
             self.gt_pred = GT_position
             self.gather_index_over = gather_index_over
@@ -126,7 +129,7 @@ class Model:
         pred_pos_over = tf.gather_nd(self.pred, self.gather_index_over)
         pred_pos_under = tf.gather_nd(self.pred, self.gather_index_under)
         self.topo_reg_loss = tf.reduce_sum(tf.nn.relu(pred_pos_under-pred_pos_over+0.005))
-        self.optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(self.loss-0.3*self.reg_loss+0.005*self.topo_reg_loss)
+        self.optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(self.loss-0.3*self.reg_loss+0.005*self.topo_reg_loss, global_step=global_step)
         tf.summary.scalar('loss', self.loss)
         self.merged_summary = tf.summary.merge_all()
 
