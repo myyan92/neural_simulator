@@ -112,7 +112,7 @@ class Model:
 
     def setup_optimizer(self, learning_rate, GT_position, gather_index_over, gather_index_under):
         global_step = tf.Variable(0, trainable=False)
-        decay_learning_rate = tf.train.exponential_decay(learning_rate, global_step, 100000, 0.9, staircase=True)
+        decay_learning_rate = tf.train.exponential_decay(learning_rate, global_step, 2000, 0.95, staircase=True)
 
         if GT_position is not None and gather_index_over is not None and gather_index_under is not None:
             self.gt_pred = GT_position
