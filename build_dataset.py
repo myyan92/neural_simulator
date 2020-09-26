@@ -1,46 +1,55 @@
 # from PIL import Image
-import os
+import os, random
 import glob
 import numpy as np
 import tensorflow as tf
-from neural_simulator.dataset_io import data_writer
 import pdb
+from neural_simulator.dataset_io import data_writer
+
+
+action_pattern = "%04d_act.txt"
+position_pattern = "%04d_%03d.txt"
+
+def add_data(data_dir, writer):
+    idx = int(data_dir.split('/')[-1])
+    act = np.loadtxt(os.path.join(data_dir, action_pattern % (idx)))
+    for i,a in enumerate(act):
+        result = np.loadtxt(os.path.join(data_dir, position_pattern % (idx,i+1)))
+        start = np.loadtxt(os.path.join(data_dir, position_pattern % (idx,i)))
+        if np.isnan(a).any():
+            print(idx,i,a)
+            continue
+        action_node = int(a[0])
+        action = np.zeros_like(start)
+        action[action_node,:] = a[1:]
+        record = data_writer(start, action, result)
+        writer.write(record.SerializeToString())
+    return act.shape[0]
 
 
 if __name__ == "__main__":
 
-    tfrecords_filename = 'datasets/neuralsim_test_50.tfrecords'
+    data = glob.glob('/scr1/mengyuan/data/data_simseq_2d/0*')
+    random.shuffle(data)
+    train_data = [d for d in data if d[-1]!='0']
+    test_data = [d for d in data if d[-1]=='0']
+    print(len(train_data), len(test_data))
+
+    tfrecords_filename = 'datasets/neuralsim_train_simseq2d.tfrecords'
     writer = tf.python_io.TFRecordWriter(tfrecords_filename)
-
-    action_pattern = "/scr1/ylzhu/neural_simulator/data/%08d_act.txt"
-    position_pattern = "/scr1/ylzhu/neural_simulator/data/%08d_%03d.txt"
-    # num_curve = 10000
-    # num_action = 10
-    idx = 9000
-    count = 0
     total_len = 0
-    while idx < 9050:
-        if not os.path.isfile(action_pattern % (idx)):
-            print(action_pattern % (idx),"action not found")
-            idx+=1
-            continue
-        statefile_len = len(glob.glob("/".join(position_pattern.split("/")[:-1])+"/{:08d}_[0-9][0-9][0-9]*.txt".format(idx)))
-        total_len+=statefile_len
-        print(idx,statefile_len,total_len,total_len//(count+1))
-        for a in range(1,statefile_len):
-            result = np.loadtxt(position_pattern % (idx,a))
-            start = np.loadtxt(position_pattern % (idx,a-1))
-            with open(action_pattern % (idx)) as f:
-                line = f.readline()
-            tokens = line.strip().split()
-            action_node = int(tokens[0])
-            action_x, action_y = float(tokens[1]), float(tokens[2])
-            action = np.zeros_like(start)
-            action[action_node,:]=np.array([action_x, action_y])
-            record = data_writer(start, action, result)
-            writer.write(record.SerializeToString())
-        idx+=1
-        count+=1
-
+    for data in train_data:
+        data_len = add_data(data, writer)
+        total_len += data_len
     writer.close()
-    print('total:',total_len)
+    print('train total:',total_len)
+
+    tfrecords_filename = 'datasets/neuralsim_test_simseq2d.tfrecords'
+    writer = tf.python_io.TFRecordWriter(tfrecords_filename)
+    total_len = 0
+    for data in test_data:
+        data_len = add_data(data, writer)
+        total_len += data_len
+    writer.close()
+    print('test total:',total_len)
+

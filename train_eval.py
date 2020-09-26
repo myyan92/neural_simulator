@@ -1,25 +1,25 @@
 import tensorflow as tf
-from model_wrapper import Model
-from dataset_io_new import data_parser  # for 3d state and 5d action.
+from dataset_io import data_parser
 import numpy as np
-import argparse
-import gin
+import functools
+import argparse, gin, os
 import pdb
 import matplotlib.pyplot as plt
 
+@gin.configurable
 class Trainner():
-    def __init__(self, model_type, train_dataset, eval_dataset, num_epoch, batch_size):
+    def __init__(self, model, train_dataset, eval_dataset, num_epoch, batch_size, save_dir, snapshot=None):
 
         # create TensorFlow Dataset objects
+        parser = functools.partial(data_parser, dim=model.dim)
         tr_data = tf.data.TFRecordDataset(train_dataset)
-        tr_data = tr_data.map(data_parser).filter(lambda a,b,c: tf.norm(a)>1e-3)
-        tr_data = tr_data.shuffle(10000).batch(batch_size)
+        tr_data = tr_data.map(parser).shuffle(10000).batch(batch_size)
         val_data = tf.data.TFRecordDataset(eval_dataset)
-        val_data = val_data.map(data_parser).batch(batch_size)
+        val_data = val_data.map(parser).batch(batch_size)
         # create TensorFlow Iterator object
         iterator = tf.data.Iterator.from_structure(tr_data.output_types,
                                                    tr_data.output_shapes)
-        self.start, self.action, self.result = iterator.get_next()  # self.next_gradient
+        self.start, self.action, self.result = iterator.get_next()
         # create two initialization ops to switch between the datasets
         self.training_init_op = iterator.make_initializer(tr_data)
         self.validation_init_op = iterator.make_initializer(val_data)
@@ -30,19 +30,23 @@ class Trainner():
         tf_config.gpu_options.allow_growth=True
         self.sess = tf.Session(config=tf_config)
         self.num_epoch = num_epoch
-        self.model = Model(model_type)
+        self.model = model
         self.model.build(input=self.start, action=self.action)
         self.model.setup_optimizer(0.001, self.result)
         self.global_step = 0
-        self.trial_name = 'GRU_attention_topo'
-        self.train_writer = tf.summary.FileWriter('tboard/train_{}/'.format(self.trial_name), self.sess.graph)
+        self.save_dir = save_dir
+        self.train_writer = tf.summary.FileWriter(os.path.join(save_dir, 'tfboard'), self.sess.graph)
         self.sess.run(tf.global_variables_initializer())
+        if snapshot is not None:
+            self.model.load(self.sess, snapshot)
+        config_str = gin.operative_config_str()
+        with open(os.path.join(save_dir, '0.gin'), 'w') as f:
+            f.write(config_str)
 
     def train_epoch(self):
 
         self.sess.run(self.training_init_op)
         losses = []
-        grads = []
         while True:
             try:
                 summary, _, loss = self.sess.run([self.model.merged_summary, self.model.optimizer, self.model.loss])
@@ -60,7 +64,7 @@ class Trainner():
         max_dev = []
         while True:
             try:
-                input, action, gt, pred, loss = self.sess.run([self.start, self.action, self.result, self.model.pred, self.model.loss]) # changed for debuging
+                input, action, gt, pred, loss = self.sess.run([self.start, self.action, self.result, self.model.pred, self.model.loss])
 #                for s,a,r,p in zip(input, action, gt, pred):
 #                    plt.plot(s[:,0], s[:,1])
 #                    plt.plot(r[:,0], r[:,1])
@@ -77,25 +81,25 @@ class Trainner():
                 break
         print("eval average node L2 loss: %f" % (total_loss/total_count))
         print("eval max deviation: %f" %(np.mean(max_dev)))
-        #print(np.histogram(max_dev))
 
     def train(self):
         for i in range(self.num_epoch):
             self.train_epoch()
-            self.model.save(self.sess, './models_{}/model'.format(self.trial_name), i)
+            self.model.save(self.sess, os.path.join(self.save_dir, 'model'), i)
             self.eval()
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('model_type', choices=['linear', 'fc_concat', 'fc_add', 'conv_add', 'LSTM', 'LSTM_attention', 'GRU_attention'],
-                                      help="model type")
+    parser.add_argument('action', choices=["train", "eval"], help="running train or eval.")
+    parser.add_argument('--gin_config', default='', help="path to gin config file.")
+    parser.add_argument('--gin_bindings', action='append', help='gin bindings strings.')
     args = parser.parse_args()
 
-    train_dataset = 'datasets/neuralsim_train_simseq3d_topochange.tfrecords'
-    test_dataset = 'datasets/neuralsim_test_simseq3d_topochange.tfrecords'
+    gin.parse_config_files_and_bindings([args.gin_config], args.gin_bindings)
+    trainner = Trainner()
+    if args.action == "train":
+        trainner.train()
+    else:
+        trainner.model.load(trainner.sess, trainner.snapshot)
+        trainner.eval()
 
-    trainner = Trainner(args.model_type, train_dataset, test_dataset, 300, 640)
-    trainner.train()
-#    pretrain_path = './models_LSTM_attention_topo/model-290'
-#    trainner.model.load(trainner.sess, pretrain_path)
-#    trainner.eval()

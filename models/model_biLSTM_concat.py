@@ -1,40 +1,38 @@
 import numpy as np
 import tensorflow as tf
+import gin
+import pdb
 
-class Model:
-    def __init__(self):
+@gin.configurable
+class Model_LSTM:
+    def __init__(self, dim):
         self.scope='sim'
+        self.dim = dim
 
     def build(self, input=None, action=None):
-        """
-        load variable from npy to build the VGG
-        :param rgb: rgb image [batch, height, width, 3] values scaled [0, 255]
-        """
-
         with tf.variable_scope(self.scope):
             if input is not None and action is not None:
                 self.input = input
                 self.action = action
             else:
-                self.input = tf.placeholder(dtype=tf.float32, shape=[None,128,2])
-                self.action = tf.placeholder(dtype=tf.float32, shape=[None,128,2])
+                self.input = tf.placeholder(dtype=tf.float32, shape=[None, 65, self.dim])
+                self.action = tf.placeholder(dtype=tf.float32, shape=[None, 65, self.dim])
 
-            self.ind = tf.norm(self.action, axis=2, keep_dims=True) > 0
+            self.ind = tf.norm(self.action, axis=2, keepdims=True) > 0
             self.ind = tf.cast(self.ind, tf.float32)
             self.concat = tf.concat([self.input, self.action, self.ind], axis=2)
-            self.fc1 = self.conv_layer(self.concat, 'fc1', 32, kernel=255, activation=tf.nn.softsign)
-            self.fc2 = self.conv_layer(self.fc1, 'fc2', 32, kernel=255, activation=tf.nn.softsign)
-            self.fc3 = self.conv_layer(self.fc2, 'fc3', 2, kernel=255, scale=0.3, activation=None)
-            #self.fc3 = self.dense(self.fc2, 'fc3', 1024, tf.nn.softsign)
-            #self.fc4 = self.dense(self.fc3, 'fc4', 256, None)
-            self.pred = self.input + self.fc3
+            cell = tf.nn.rnn_cell.LSTMCell(256, forget_bias=1.0, activation=tf.nn.relu6, name='basic_lstm_cell')  # default is tanh
+            self.biLSTM, _ = tf.nn.bidirectional_dynamic_rnn(cell, cell, self.concat,
+                                                             dtype = tf.float32, time_major=False)
+            # self.biLSTM stores (hidden_fw, hidden_bw)
+            self.feature = tf.concat([self.biLSTM[0], self.biLSTM[1], self.input], axis=2)
+            self.pred = self.conv_layer(self.feature, name='pred', channels=self.dim, kernel=1, activation=None)
 
             self.saver = tf.train.Saver(var_list=self.get_trainable_variables(), max_to_keep=50)
 
-
-    def conv_layer(self, bottom, name, channels, kernel=3, stride=1, scale=1.0, activation=tf.nn.relu):
+    def conv_layer(self, bottom, name, channels, kernel=3, stride=1, activation=tf.nn.relu):
         with tf.variable_scope(name):
-            k_init = tf.variance_scaling_initializer(scale)
+            k_init = tf.variance_scaling_initializer()
             b_init = tf.zeros_initializer()
             output = tf.layers.conv1d(bottom, channels, kernel_size=kernel, strides=stride, padding='SAME',
                                       activation=activation, kernel_initializer=k_init, bias_initializer=b_init)
@@ -65,7 +63,7 @@ class Model:
         if GT_position is not None:
             self.gt_pred = GT_position
         else:
-            self.gt_pred = tf.placeholder(name="gt_pred", dtype=tf.float32, shape=[None, 128,2])
+            self.gt_pred = tf.placeholder(name="gt_pred", dtype=tf.float32, shape=[None, 65, self.dim])
         self.loss = tf.nn.l2_loss(self.gt_pred-self.pred, "loss")
         self.optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(self.loss)
         tf.summary.scalar('loss', self.loss)
@@ -77,16 +75,16 @@ class Model:
                                                                    self.gt_pred:annos})
         return loss
 
-    def save(self, sess, step):
-        self.saver.save(sess, './model', global_step=step)
+    def save(self, sess, file_dir, step):
+        self.saver.save(sess, file_dir, global_step=step)
 
     def load(self, sess, snapshot):
         self.saver.restore(sess, snapshot)
 
 if __name__ == "__main__":
-    model = Model()
-    input = tf.placeholder(dtype=tf.float32, shape=(None, 128,2))
-    action = tf.placeholder(dtype=tf.float32, shape=(None, 128,2))
+    model = Model_LSTM(3)
+    input = tf.placeholder(dtype=tf.float32, shape=(None, 65, 3))
+    action = tf.placeholder(dtype=tf.float32, shape=(None, 65, 3))
     model.build(input, action)
-    output = tf.placeholder(dtype=tf.float32, shape=(None, 128,2))
+    output = tf.placeholder(dtype=tf.float32, shape=(None, 65, 3))
     model.setup_optimizer(0.001, output)

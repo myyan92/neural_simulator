@@ -1,24 +1,24 @@
 import tensorflow as tf
 import os
-from model_long_horizon import Model
 from dataset_io_long_horizon import data_parser
 import numpy as np
 import functools
 import matplotlib.pyplot as plt
 import pdb
 
+@gin.configurable
 class Visualizer():
-    def __init__(self, eval_dataset, eval_snapshot):
+    def __init__(self, model, eval_dataset, eval_snapshot):
 
         # create TensorFlow Dataset objects
         val_data = tf.data.TFRecordDataset(eval_dataset)
-        data_parser_noaug = functools.partial(data_parser, augment=False)
-        val_data = val_data.map(data_parser_noaug)
+        parser_noaug = functools.partial(data_parser, dim=model.dim, augment=False)
+        val_data = val_data.map(parser_noaug)
         val_data = val_data.batch(1)
         # create TensorFlow Iterator object
         iterator = tf.data.Iterator.from_structure(val_data.output_types,
                                                    val_data.output_shapes)
-        self.start, self.action, self.result = iterator.get_next() # self.next_gradient
+        self.start, self.action, self.result, _, _ = iterator.get_next()
         # create two initialization ops to switch between the datasets
         self.eval_init_op = iterator.make_initializer(val_data)
 
@@ -27,7 +27,7 @@ class Visualizer():
             intra_op_parallelism_threads=16)
         tf_config.gpu_options.allow_growth=True
         self.sess = tf.Session(config=tf_config)
-        self.model = Model()  #load pretrained weights
+        self.model = model
         self.model.build(steps=10, input=self.start, action=self.action)
         self.model.setup_optimizer(0, self.result)
         self.sess.run(tf.global_variables_initializer())
@@ -39,10 +39,10 @@ class Visualizer():
         total_count = 0
         while True:
             try:
-                start, action, result, pred, loss = self.sess.run([self.start, self.action, self.result,
-                                                                   self.model.pred, self.model.loss])
+                start, action, result, pred = self.sess.run([self.start, self.action, self.result,
+                                                             self.model.pred], feed_dict={self.model.training:False})
                 max_dev = np.amax(np.linalg.norm(result-pred, axis=3), axis=2)
-                # loss = np.sum(np.square(result-pred))/2.0
+                loss = np.sum(np.square(result-pred))/2.0
                 total_loss += loss
                 total_count += result.shape[0] * result.shape[1] * result.shape[2]
                 for _step in range(10):
@@ -70,6 +70,13 @@ class Visualizer():
         print("eval average node L2 loss: %f" % (total_loss/total_count))
 
 if __name__ == '__main__':
-    vis = Visualizer('/home/genli/neural_simulator/datasets/neuralsim_test_simseq3d_long_horizon.tfrecords', '/home/genli/neural_simulator/models_GRU_attention_topo/model-100')
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--gin_config', default='', help="path to gin config file.")
+    parser.add_argument('--gin_bindings', action='append', help='gin bindings strings.')
+    args = parser.parse_args()
+
+    gin.parse_config_files_and_bindings([args.gin_config], args.gin_bindings)
+
+    vis = Visualizer()
     vis.eval()
 

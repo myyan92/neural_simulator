@@ -1,11 +1,14 @@
 import numpy as np
 import tensorflow as tf
 from topology.state_2_topology import find_intersections
+import gin
 import pdb, time
 
-class Model:
-    def __init__(self):
+@gin.configurable
+class Model_GRU_att_long:
+    def __init__(self, dim):
         self.scope='sim'
+        self.dim = dim
 
     def build_onestep(self, input, action):
 
@@ -33,7 +36,6 @@ class Model:
             attention_feature = tf.matmul(attention_w, feature_1)
             combined_feature = tf.concat([feature_1, attention_feature], axis=2)
 
-            # fc1 = self.dense(combined_feature, 'fc1', 512, 'relu')
             fc2 = self.dense(combined_feature, 'fc2', 1536, 'relu')
             fc2_drop = tf.nn.dropout(fc2, 0.5)
             cell2 = tf.nn.rnn_cell.GRUCell(512, activation=tf.nn.relu6, name='gru_cell_2')
@@ -41,16 +43,8 @@ class Model:
                                                           dtype = tf.float32, time_major=False)
             feature_2 = tf.concat([biLSTM_2[0], biLSTM_2[1], input], axis=2)
             fc3 = self.dense(feature_2, 'fc3', 768, 'relu')
-            # fc3_drop = tf.nn.dropout(fc3, 0.5)
-
-            # cell3 = tf.nn.rnn_cell.GRUCell(256, activation=tf.nn.relu6, name='gru_cell_3')
-            # biLSTM_3, _ = tf.nn.bidirectional_dynamic_rnn(cell3, cell3, fc3, dtype=tf.float32, time_major=False)
-            # feature_3 = tf.concat([biLSTM_3[0], biLSTM_3[1], input], axis=2)
-            # feature_3_drop = tf.nn.dropout(feature_3, 0.5)
-
             fc4 = self.dense(fc3, 'fc4', 256, 'relu')
-            # fc5 = self.dense(fc4, 'fc5', 64, 'relu')
-            pred = self.dense(fc4, 'pred', 3, activation=None)
+            pred = self.dense(fc4, 'pred', self.dim, activation=None)
 
         return pred, [feature_1, attention_feature, feature_2]
 
@@ -62,9 +56,12 @@ class Model:
                 self.input = input
                 self.action = action
             else:
-                self.input = tf.placeholder(dtype=tf.float32, shape=[None,steps,64,3])
-                self.action = tf.placeholder(dtype=tf.float32, shape=[None,steps,64,3])
+                self.input = tf.placeholder(dtype=tf.float32, shape=[None,steps,65,self.dim])
+                self.action = tf.placeholder(dtype=tf.float32, shape=[None,steps,65,self.dim])
 
+        self.training = tf.placeholder(dtype=tf.bool)
+        self.global_step = tf.Variable(0, name='global_step',trainable=False)
+        use_input_rate = tf.train.exponential_decay(1.0, self.global_step, 1000, 0.9)
         self.preds = []
         self.debug_layers = []
         for i in range(steps):
@@ -73,7 +70,9 @@ class Model:
                 self.preds.append(pred)
                 self.debug_layers.append(debug_layer)
             else:
-                pred, debug_layer = self.build_onestep(self.preds[-1], self.action[:,i])
+                pred, debug_layer = tf.cond(tf.logical_and(tf.random.uniform([]) < use_input_rate, self.training),
+                                            self.build_onestep(self.input[:,i], self.action[:,i]),
+                                            self.build_onestep(self.preds[-1], self.action[:,i]))
                 self.preds.append(pred)
                 self.debug_layers.append(debug_layer)
 
@@ -97,12 +96,11 @@ class Model:
         return output
 
     def predict_single(self, sess, input, action):
-        pred, = sess.run([self.pred], feed_dict={self.input:input[None], self.action:action[None]})
+        pred, = sess.run([self.pred], feed_dict={self.input:input[None], self.action:action[None], self.training:False})
         return pred[0]
 
     def predict_batch(self, sess, inputs, actions):
-        pdb.set_trace()
-        pred, = sess.run([self.pred], feed_dict={self.input:inputs, self.action:actions})
+        pred, = sess.run([self.pred], feed_dict={self.input:inputs, self.action:actions, self.training:False})
         return pred
 
     def get_variables(self):
@@ -111,15 +109,14 @@ class Model:
         return tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, self.scope)
 
     def setup_optimizer(self, learning_rate, GT_position, gather_index_over, gather_index_under):
-        global_step = tf.Variable(0, trainable=False)
-        decay_learning_rate = tf.train.exponential_decay(learning_rate, global_step, 2000, 0.95, staircase=True)
+        decay_learning_rate = tf.train.exponential_decay(learning_rate, self.global_step, 2000, 0.95, staircase=True)
 
         if GT_position is not None and gather_index_over is not None and gather_index_under is not None:
             self.gt_pred = GT_position
             self.gather_index_over = gather_index_over
             self.gather_index_under = gather_index_under
         else:
-            self.gt_pred = tf.placeholder(name="gt_pred", dtype=tf.float32, shape=[None, self.steps, 64,3])
+            self.gt_pred = tf.placeholder(name="gt_pred", dtype=tf.float32, shape=[None, self.steps, 65,self.dim])
             self.gather_index_over = tf.placeholder(name="reg_index_over", dtype=tf.int32, shape=[None, None, 4])
             self.gather_index_under = tf.placeholder(name="reg_index_under", dtype=tf.int32, shape=[None, None, 4])
 
@@ -161,7 +158,8 @@ class Model:
                                                                    self.action:actions,
                                                                    self.gt_pred:annos,
                                                                    self.gather_index_over:gather_index_over,
-                                                                   self.gather_index_under:gather_index_under})
+                                                                   self.gather_index_under:gather_index_under,
+                                                                   self.training:True})
         return loss
 
     def save(self, sess, file_dir, step):
@@ -173,15 +171,15 @@ class Model:
 
 
 if __name__=="__main__":
-    model = Model()
-    input_tf = tf.placeholder(tf.float32, shape=[4,10,64,3])
-    action_tf = tf.placeholder(tf.float32, shape=[4,10,64,3])
-    gt_tf = tf.placeholder(tf.float32, shape=[4,10,64,3])
+    model = Model_GRU_att_long(3)
+    input_tf = tf.placeholder(tf.float32, shape=[4,10,65,3])
+    action_tf = tf.placeholder(tf.float32, shape=[4,10,65,3])
+    gt_tf = tf.placeholder(tf.float32, shape=[4,10,65,3])
     model.build(10, input_tf, action_tf)
     model.setup_optimizer(0.001, gt_tf)
-    input_val = np.random.uniform(size=(4,10,64,3))
-    action_val = np.random.uniform(size=(4,10,64,3))
-    gt_val = np.random.uniform(size=(4,10,64,3))
+    input_val = np.random.uniform(size=(4,10,65,3))
+    action_val = np.random.uniform(size=(4,10,65,3))
+    gt_val = np.random.uniform(size=(4,10,65,3))
 
     sess = tf.Session()
     sess.run(tf.global_variables_initializer())

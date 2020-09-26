@@ -1,0 +1,21 @@
+#from models.model_linear import Model_Linear
+#from models.model_MLP import Model_MLP
+#from models.model_resnet import Model_Res
+#from models.model_biLSTM_concat import Model_LSTM
+#from models.model_GRU_attention import Model_GRU_Att
+
+import models.model_linear
+import models.model_MLP
+import models.model_resnet
+import models.model_biLSTM_concat
+import models.model_GRU_attention
+
+Trainner.model = @Model_LSTM()
+Trainner.train_dataset = 'datasets/neuralsim_train_simseq2d.tfrecords'
+Trainner.eval_dataset = 'datasets/neuralsim_test_simseq2d.tfrecords'
+Trainner.batch_size = 640
+Trainner.num_epoch = 100
+Trainner.save_dir = './biLSTM_simseq_2d'
+
+Model_LSTM.dim = 2
+

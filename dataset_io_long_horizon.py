@@ -1,6 +1,5 @@
 import numpy as np
 import tensorflow as tf
-from topology.state_2_topology import find_intersections
 import pdb
 
 def _bytes_feature(value):
@@ -35,28 +34,33 @@ def data_writer(s1,act,s2, gio, giu):
     }))
     return record
 
-def data_parser(record, augment=True):
+def data_parser(record, dim, step=10, augment=True):
     features = tf.parse_single_example(
       record,
       features={
-        'start': tf.FixedLenFeature([1920], tf.float32),
-        'action': tf.FixedLenFeature([1920], tf.float32),
-        'result': tf.FixedLenFeature([1920], tf.float32),
+        'start': tf.FixedLenFeature([65*step*dim], tf.float32),
+        'action': tf.FixedLenFeature([65*step*dim], tf.float32),
+        'result': tf.FixedLenFeature([65*step*dim], tf.float32),
         'index_over': tf.FixedLenFeature([], tf.string),
         'index_under': tf.FixedLenFeature([], tf.string),
         'length': tf.FixedLenFeature([], tf.int64),
         })
 
-    start = tf.reshape(features['start'], tf.constant([10,64,3]))
-    action = tf.reshape(features['action'], tf.constant([10,64,3]))
-    result = tf.reshape(features['result'], tf.constant([10,64,3]))
+    start = tf.reshape(features['start'], tf.constant([step,65,dim]))
+    action = tf.reshape(features['action'], tf.constant([step,65,dim]))
+    result = tf.reshape(features['result'], tf.constant([step,65,dim]))
     if augment:
         theta = tf.random_uniform([], -np.pi, np.pi)
-        rotate = tf.stack([tf.cos(theta), tf.sin(theta), 0, -tf.sin(theta), tf.cos(theta), 0, 0, 0, 1])
-        rotate = tf.reshape(rotate, (3,3))
+        if dim == 2:
+            rotate = tf.stack([tf.cos(theta), tf.sin(theta),
+                              -tf.sin(theta), tf.cos(theta)])
+            rotate = tf.reshape(rotate, (2,2))
+        else dim==3:
+            rotate = tf.stack([tf.cos(theta), tf.sin(theta), 0,
+                              -tf.sin(theta), tf.cos(theta), 0,
+                               0, 0, 1])
+            rotate = tf.reshape(rotate, (3,3))
         start = tf.tensordot(start, rotate, 1)
-        # action_move, action_rotate = tf.split(action, [3,2], axis=-1)
-        # action = tf.concat([tf.matmul(action_move, rotate), action_rotate], axis=-1)
         action = tf.tensordot(action, rotate, 1)
         result = tf.tensordot(result, rotate, 1)
 

@@ -13,6 +13,7 @@ def add_data(horizon, data_dir, writer):
     idx = int(data_dir.split('/')[-1])
     act = np.loadtxt(os.path.join(data_dir, action_pattern % (idx)))
     states = [np.loadtxt(os.path.join(data_dir, position_pattern % (idx,i))) for i in range(len(act))]
+    states = [0.5*(st[:64]+st[64:]) for st in states]
     states = np.array(states)
 
     intersections = [find_intersections(state) for state in states]
@@ -47,8 +48,7 @@ def add_data(horizon, data_dir, writer):
     actions = np.zeros_like(states)
     for i,a in enumerate(act):
         action_node = int(a[0])
-        move = a[1:]
-        actions[i,action_node] = move
+        actions[i,action_node] = a[1:]
 
     for i in range(0, len(act)-horizon, horizon//2):
         start = states[i:i+horizon]

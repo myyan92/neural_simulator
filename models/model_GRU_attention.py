@@ -1,25 +1,26 @@
 import numpy as np
 import tensorflow as tf
+import gin
 import pdb
 
-class Model:
-    def __init__(self):
+@gin.configurable
+class Model_GRU_Att:
+    def __init__(self, dim):
         self.scope='sim'
+        self.dim = dim
 
     def build(self, input=None, action=None):
-
         with tf.variable_scope(self.scope):
             if input is not None and action is not None:
                 self.input = input
                 self.action = action
             else:
-                self.input = tf.placeholder(dtype=tf.float32, shape=[None,64,3])
-                self.action = tf.placeholder(dtype=tf.float32, shape=[None,64,3])
+                self.input = tf.placeholder(dtype=tf.float32, shape=[None, 65, self.dim])
+                self.action = tf.placeholder(dtype=tf.float32, shape=[None, 65, self.dim])
 
             self.ind = tf.norm(self.action, axis=2, keepdims=True) > 0
             self.ind = tf.cast(self.ind, tf.float32)
             self.concat = tf.concat([self.input, self.action, self.ind], axis=2)
-            # cell = tf.nn.rnn_cell.LSTMCell(512, forget_bias=1.0, activation=tf.nn.relu6, name='basic_lstm_cell')  # default is tanh
             cell = tf.nn.rnn_cell.GRUCell(512, activation=tf.nn.relu6, name='gru_cell')
             self.biLSTM, _ = tf.nn.bidirectional_dynamic_rnn(cell, cell, self.concat,
                                                              dtype = tf.float32, time_major=False)
@@ -38,25 +39,16 @@ class Model:
             attention_w = attention_w / (tf.reduce_sum(attention_w, axis=-1, keepdims=True) + 1e-8)
             self.attention_feature = tf.matmul(attention_w, self.feature)
             self.combined_feature = tf.concat([self.feature, self.attention_feature], axis=2)
-            # fc1 = self.dense(self.combined_feature, 'fc1', 512, 'relu')
+
             fc2 = self.dense(self.combined_feature, 'fc2', 1536, 'relu')
             fc2_drop = tf.nn.dropout(fc2, 0.5)
-            # cell2 = tf.nn.rnn_cell.LSTMCell(512, forget_bias=1.0, activation=tf.nn.relu6, name='basic_lstm_cell_2')  # default is tanh
             cell2 = tf.nn.rnn_cell.GRUCell(512, activation=tf.nn.relu6, name='gru_cell_2')
             self.biLSTM_2, _ = tf.nn.bidirectional_dynamic_rnn(cell2, cell2, fc2_drop,
                                                                dtype = tf.float32, time_major=False)
             self.feature_2 = tf.concat([self.biLSTM_2[0], self.biLSTM_2[1], self.input], axis=2)
             fc3 = self.dense(self.feature_2, 'fc3', 768, 'relu')
-            # fc3_drop = tf.nn.dropout(fc3, 0.5)
-
-            # cell3 = tf.nn.rnn_cell.GRUCell(256, activation=tf.nn.relu6, kernel_initializer=tf.variance_scaling_initializer(), bias_initializer=tf.zeros_initializer())
-            # self.biLSTM_3, _ = tf.nn.bidirectional_dynamic_rnn(cell3, cell3, conv1, dtype=tf.float32, time_major=False)
-            # self.feature_3 = tf.concat([self.biLSTM_3[0], self.biLSTM_3[1], self.input], axis=2)
-            # self.feature_3_drop = tf.nn.dropout(self.feature_3, 0.5)
-
             fc4 = self.dense(fc3, 'fc4', 256, 'relu')
-            # fc5 = self.dense(fc4, 'fc5', 64, 'relu')
-            self.pred = self.dense(fc4, 'pred', 3, activation=None)
+            self.pred = self.dense(fc4, 'pred', self.dim, activation=None)
 
             self.saver = tf.train.Saver(var_list=self.get_trainable_variables(), max_to_keep=1000000)
 
@@ -93,7 +85,7 @@ class Model:
         if GT_position is not None:
             self.gt_pred = GT_position
         else:
-            self.gt_pred = tf.placeholder(name="gt_pred", dtype=tf.float32, shape=[None, 64,3])
+            self.gt_pred = tf.placeholder(name="gt_pred", dtype=tf.float32, shape=[None, 65, self.dim])
         self.loss = tf.nn.l2_loss(self.gt_pred-self.pred, "loss")
         self.optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(self.loss)
         tf.summary.scalar('loss', self.loss)
@@ -110,4 +102,13 @@ class Model:
 
     def load(self, sess, snapshot):
         self.saver.restore(sess, snapshot)
+
+
+if __name__ == "__main__":
+    model = Model_GRU_Att(3)
+    input = tf.placeholder(dtype=tf.float32, shape=(None, 65, 3))
+    action = tf.placeholder(dtype=tf.float32, shape=(None, 65, 3))
+    model.build(input, action)
+    output = tf.placeholder(dtype=tf.float32, shape=(None, 65, 3))
+    model.setup_optimizer(0.001, output)
 
